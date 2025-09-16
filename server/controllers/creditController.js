@@ -53,27 +53,22 @@ export const getPlans = async (req, res) => {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// api controller for purchasing
 export const purchasePlan = async (req, res) => {
   try {
     const { planId } = req.body;
     const userId = req.user._id;
 
     const plan = plans.find((p) => p._id === planId);
-    if (!plan) {
-      return res.json({ success: false, message: "Invalid Plan" });
-    }
+    if (!plan) return res.json({ success: false, message: "Invalid Plan" });
 
-    // create new Transaction (fixed field names)
     const transaction = await Transaction.create({
       userId,
       planId: plan._id,
-      amount: plan.price, // was "amaount"
+      amount: plan.price, // FIXED
       credits: plan.credits,
       isPaid: false,
     });
 
-    // figure out origin safely
     const origin =
       req.headers.origin || process.env.APP_ORIGIN || "http://localhost:3000";
 
@@ -91,21 +86,17 @@ export const purchasePlan = async (req, res) => {
       mode: "payment",
       success_url: `${origin}/loading`,
       cancel_url: `${origin}`,
-      // keep these EXACT — webhook reads metadata.transactionId + appId
-      metadata: {
-        transactionId: transaction._id.toString(),
-        appId: "lumora",
-      },
+      metadata: { transactionId: transaction._id.toString(), appId: "lumora" }, // EXACT
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });
 
-    return res.json({
-      success: true, // was "sucess"
+    res.json({
+      success: true,
       url: session.url,
-      sessionId: session.id, // handy for debugging
       transactionId: transaction._id,
+      sessionId: session.id,
     });
   } catch (err) {
-    return res.json({ success: false, message: err.message });
+    res.json({ success: false, message: err.message });
   }
 };

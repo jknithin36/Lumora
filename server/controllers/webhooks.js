@@ -1,66 +1,83 @@
+// controllers/webhooks.js
 import Stripe from "stripe";
 import Transaction from "../models/transaction.js";
 import User from "../models/user.js";
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-06-20",
+});
+
 const stripeWebhooks = async (req, res) => {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-  const sig = request.headers["stripe-signature"];
-
+  const sig = req.headers["stripe-signature"];
   let event;
 
   try {
+    // req.body must be raw Buffer (see route wiring below)
     event = stripe.webhooks.constructEvent(
       req.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET_KEY
+      process.env.STRIPE_WEBHOOK_SECRET // make sure this matches your Stripe dashboard / CLI secret
     );
-  } catch (e) {
-    res.status(400).json({ success: false, message: e.message });
+  } catch (err) {
+    console.error("Webhook verify failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
     switch (event.type) {
-      case "payment_intent.succeeded": {
-        const paymentIntent = event.checkout.sessions.list({
-          payment_intent: paymentIntent.id,
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        const { transactionId, appId } = session?.metadata || {};
+
+        console.log("checkout.session.completed", {
+          transactionId,
+          appId,
+          payment_status: session.payment_status,
         });
 
-        const session = sessionList.data[0];
+        if (appId !== "lumora")
+          return res.json({ received: true, message: "ignored appId" });
+        if (!transactionId)
+          return res.json({ received: true, message: "missing transactionId" });
+        if (session.payment_status !== "paid")
+          return res.json({ received: true, message: "not paid yet" });
 
-        const { transactionId, appId } = session.metadata;
+        // flip isPaid once
+        const tx = await Transaction.findOneAndUpdate(
+          { _id: transactionId, isPaid: false },
+          {
+            $set: {
+              isPaid: true,
+              stripeSessionId: session.id,
+              stripePaymentIntentId: session.payment_intent || null,
+            },
+          },
+          { new: true }
+        );
 
-        if (appId === "lumora") {
-          const transaction = await Transaction.findOne({
-            _id: transactionId,
-            isPaid: false,
-          });
-
-          await User.updateOne(
-            { _id: transaction.userId },
-            { $inc: { credits: transaction.credits } }
-          );
-
-          transaction.isPaid = true;
-
-          await transaction.save();
-        } else {
+        if (!tx) {
+          // already handled or not found — acknowledge anyway
           return res.json({
             received: true,
-            message: "Ingorned Event: Invalid App",
+            message: "already paid or not found",
           });
         }
-        break;
+
+        await User.updateOne(
+          { _id: tx.userId },
+          { $inc: { credits: tx.credits } }
+        );
+
+        return res.json({ received: true });
       }
 
       default:
-        console.log("unhandled event type", event.type);
-        break;
+        console.log("Unhandled event:", event.type);
+        return res.json({ received: true });
     }
-
-    res.json({ received: true });
-  } catch (error) {
-    res.status(500).send("Internal Server Error");
+  } catch (err) {
+    console.error("Webhook handler error:", err);
+    return res.status(500).send("Internal Server Error");
   }
 };
 
