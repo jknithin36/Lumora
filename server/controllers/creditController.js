@@ -1,6 +1,6 @@
 import Transaction from "../models/transaction.js";
-
 import Stripe from "stripe";
+
 const plans = [
   {
     _id: "basic",
@@ -42,11 +42,10 @@ const plans = [
   },
 ];
 
-//api to get plans
-
+// api to get plans
 export const getPlans = async (req, res) => {
   try {
-    res.json({ sucess: true, plans });
+    res.json({ success: true, plans });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
@@ -55,51 +54,58 @@ export const getPlans = async (req, res) => {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // api controller for purchasing
-
 export const purchasePlan = async (req, res) => {
   try {
     const { planId } = req.body;
     const userId = req.user._id;
 
-    const plan = plans.find((plan) => plan._id === planId);
-
+    const plan = plans.find((p) => p._id === planId);
     if (!plan) {
       return res.json({ success: false, message: "Invalid Plan" });
     }
 
-    // create new Transction
-
-    const transcation = await Transaction.create({
-      userId: userId,
+    // create new Transaction (fixed field names)
+    const transaction = await Transaction.create({
+      userId,
       planId: plan._id,
-      amaount: plan.price,
+      amount: plan.price, // was "amaount"
       credits: plan.credits,
       isPaid: false,
     });
 
-    const { origin } = req.headers;
+    // figure out origin safely
+    const origin =
+      req.headers.origin || process.env.APP_ORIGIN || "http://localhost:3000";
+
     const session = await stripe.checkout.sessions.create({
       line_items: [
         {
           price_data: {
             currency: "usd",
-            unit_amount: plan.price * 100,
-            product_data: {
-              name: plan.name,
-            },
+            unit_amount: Math.round(plan.price * 100),
+            product_data: { name: plan.name },
           },
           quantity: 1,
         },
       ],
+      mode: "payment",
       success_url: `${origin}/loading`,
       cancel_url: `${origin}`,
-      metadata: { transactionId: transcation._id.toString(), appId: "lumora" },
+      // keep these EXACT — webhook reads metadata.transactionId + appId
+      metadata: {
+        transactionId: transaction._id.toString(),
+        appId: "lumora",
+      },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      mode: "payment",
     });
 
-    res.json({ sucess: true, url: session.url });
+    return res.json({
+      success: true, // was "sucess"
+      url: session.url,
+      sessionId: session.id, // handy for debugging
+      transactionId: transaction._id,
+    });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    return res.json({ success: false, message: err.message });
   }
 };
