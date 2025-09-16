@@ -1,4 +1,3 @@
-// src/components/Sidebar.jsx
 import React, { useMemo, useRef, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import { assets, dummyChats, dummyUserData } from "../assets/assets";
@@ -55,11 +54,10 @@ const Sidebar = () => {
     const fromLast = isNumber(last) ? last : safeTs(last);
     const fromUpdated = safeTs(c?.updatedAt);
     const fromCreated = safeTs(c?.createdAt);
-    return fromLast ?? fromUpdated ?? fromCreated ?? null; // null if truly unknown
+    return fromLast ?? fromUpdated ?? fromCreated ?? null;
   };
 
   const filteredChats = useMemo(() => {
-    // filter
     const q = search.toLowerCase().trim();
     const list = q
       ? chats.filter((c) => {
@@ -68,7 +66,6 @@ const Sidebar = () => {
         })
       : chats.slice();
 
-    // sort by latest timestamp desc; unknown timestamps go to the bottom
     return list.sort((a, b) => {
       const ta = latestTs(a);
       const tb = latestTs(b);
@@ -87,19 +84,19 @@ const Sidebar = () => {
 
   const handleNewChat = () => {
     setSelectedChat && setSelectedChat(null);
+    navigate("/"); // new chat route
     if (isMobileWidth()) setCollapsed(true);
   };
 
   const handleRowActivate = (chatId) => {
-    // set selection first (in case route transition unmounts)
     setSelectedChat && setSelectedChat(chatId);
-    navigate("/");
+    navigate(`/chat/${chatId}`);
     if (isMobileWidth()) setCollapsed(true);
   };
 
   return (
     <>
-      {/* MOBILE-ONLY opener when collapsed */}
+      {/* MOBILE opener */}
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
@@ -170,11 +167,9 @@ const Sidebar = () => {
               >
                 <Plus className="h-5 w-5 mx-auto" />
               </button>
-
               <button
                 onClick={() => {
                   setCollapsed(false);
-                  // autofocus after expansion
                   setTimeout(() => searchRef.current?.focus(), 0);
                 }}
                 className="rounded-md p-2 hover:bg-muted-foreground/10 transition focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -193,7 +188,6 @@ const Sidebar = () => {
                 <Plus className="h-4 w-4" />
                 New Chat
               </Button>
-
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -206,7 +200,6 @@ const Sidebar = () => {
                   aria-label="Search conversations"
                 />
               </div>
-
               <div className="text-xs uppercase tracking-wide text-muted-foreground mt-1">
                 Recent chats
               </div>
@@ -229,7 +222,6 @@ const Sidebar = () => {
                     ? moment(ts).format("YYYY-MM-DD HH:mm:ss")
                     : "";
                   const tsText = ts ? moment(ts).fromNow() : "";
-
                   const chatId = c?._id ?? `row-${idx}`;
 
                   return (
@@ -262,12 +254,20 @@ const Sidebar = () => {
                               {tsText}
                             </span>
                           )}
-
-                          <button
-                            type="button"
+                          {/* FIXED: span instead of nested button */}
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (deleteChat && c?._id) deleteChat(c._id);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (deleteChat && c?._id) deleteChat(c._id);
+                              }
                             }}
                             className={cn(
                               "rounded p-1 transition focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -286,7 +286,7 @@ const Sidebar = () => {
                                   : "text-muted-foreground hover:text-red-500"
                               )}
                             />
-                          </button>
+                          </span>
                         </div>
                       </div>
                     </button>
@@ -375,7 +375,7 @@ const Sidebar = () => {
                     try {
                       e.currentTarget.src = assets.user_icon;
                     } catch {
-                      console.log();
+                      // ignore
                     }
                   }}
                 />

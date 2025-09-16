@@ -1,6 +1,11 @@
+// src/components/Message.jsx
 import { assets } from "@/assets/assets";
-import React from "react";
+import React, { useEffect } from "react";
 import moment from "moment";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypePrism from "rehype-prism-plus";
+import "@/assets/prism.css";
 
 const Message = ({ message }) => {
   const isUser = message?.role === "user";
@@ -8,7 +13,7 @@ const Message = ({ message }) => {
 
   if (!message) return null;
 
-  // Format timestamps with moment
+  // Format timestamps
   const ts = message?.timestamp ? moment(message.timestamp) : null;
   const relative = ts ? ts.fromNow() : "";
   const full = ts ? ts.format("MMM D, YYYY • h:mm A") : "";
@@ -46,18 +51,25 @@ const Message = ({ message }) => {
                 : "rounded-2xl bg-muted text-fg px-4 py-2 shadow-sm"
             }
           >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.content}
-            </p>
+            {/* Markdown content */}
+            <div
+              className="prose prose-invert max-w-none text-sm leading-relaxed
+                         prose-pre:!bg-transparent prose-pre:!p-0
+                         prose-code:before:content-[''] prose-code:after:content-['']"
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypePrism]}
+              >
+                {String(message.content ?? "")}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
 
         {/* Timestamp */}
         {ts && (
-          <div
-            className="mt-1 text-[11px] text-muted-foreground"
-            title={full} // tooltip with full timestamp
-          >
+          <div className="mt-1 text-[11px] text-muted-foreground" title={full}>
             {relative}
           </div>
         )}
